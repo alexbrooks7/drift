@@ -45,6 +45,7 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.tv.material)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
     implementation(libs.coil.compose)
