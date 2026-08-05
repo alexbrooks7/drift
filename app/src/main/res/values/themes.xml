@@ -1,0 +1,8 @@
+<resources>
+    <!-- Pure-black window background: no flash of white on launch, and the
+         "lights out" mode inherits a truly black surface (OLED pixels off). -->
+    <style name="Theme.Drift" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+    </style>
+</resources>

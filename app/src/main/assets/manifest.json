@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "sounds": [
+    {
+      "id": "ocean_waves",
+      "title": "Ocean Waves",
+      "category": "Nature",
+      "audio": "sounds/ocean_waves.ogg",
+      "image": "images/ocean_waves.jpg",
+      "defaultVolume": 0.8
+    },
+    {
+      "id": "white_noise",
+      "title": "White Noise",
+      "category": "Noise",
+      "audio": "sounds/white_noise.ogg",
+      "image": "images/white_noise.jpg",
+      "defaultVolume": 0.6
+    },
+    {
+      "id": "pink_noise",
+      "title": "Pink Noise",
+      "category": "Noise",
+      "audio": "sounds/pink_noise.ogg",
+      "image": "images/pink_noise.jpg",
+      "defaultVolume": 0.65
+    },
+    {
+      "id": "brown_noise",
+      "title": "Brown Noise",
+      "category": "Noise",
+      "audio": "sounds/brown_noise.ogg",
+      "image": "images/brown_noise.jpg",
+      "defaultVolume": 0.7
+    }
+  ]
+}

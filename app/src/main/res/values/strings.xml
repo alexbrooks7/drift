@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Drift</string>
+    <string name="playback_channel_name">Playback</string>
+</resources>
