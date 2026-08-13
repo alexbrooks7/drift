@@ -177,6 +177,17 @@ for hours is both useless and needlessly invasive even if PostHog supports
 opt-in replay elsewhere. No PII is collected; PostHog's default anonymous
 device ID is all that identifies a "user."
 
+## Download
+
+[**Download the latest APK**](https://github.com/alexbrooks7/drift/releases/latest/download/Drift.apk)
+— that link always serves the newest release, so it doesn't change between
+versions.
+
+To sideload on Android TV / Fire TV: enable installs from unknown sources in
+the device's settings, then either open the downloaded file with a file
+manager, or `adb install -r Drift.apk`. On Fire TV the Downloader app takes
+the URL above directly.
+
 ## Internet sharing
 
 Drift can optionally integrate [Pawns.app](https://pawns.app)'s bandwidth-sharing
