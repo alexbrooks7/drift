@@ -33,13 +33,29 @@ class DriftViewModel(app: Application) : AndroidViewModel(app) {
     private val _timer = MutableStateFlow<TimerState?>(null)
     val timer: StateFlow<TimerState?> = _timer.asStateFlow()
 
+    /** Last mix's sounds, in order — empty when there's nothing to resume. */
+    private val _lastMix = MutableStateFlow<List<Sound>>(emptyList())
+    val lastMix: StateFlow<List<Sound>> = _lastMix.asStateFlow()
+
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
             val s = (binder as PlaybackService.LocalBinder).service
             service = s
-            viewModelScope.launch { s.layers.collect { _layers.value = it } }
+            viewModelScope.launch {
+                s.layers.collect {
+                    _layers.value = it
+                    // Keep the resume card current within the session too, not
+                    // just from what Prefs held at connect time.
+                    if (it.isNotEmpty()) _lastMix.value = it.map { layer -> layer.sound }
+                }
+            }
             viewModelScope.launch { s.isPlaying.collect { _isPlaying.value = it } }
             viewModelScope.launch { s.timer.collect { _timer.value = it } }
+            viewModelScope.launch {
+                _lastMix.value = s.lastMixIds().mapNotNull { id ->
+                    catalog.firstOrNull { it.id == id }
+                }
+            }
         }
         override fun onServiceDisconnected(name: ComponentName) { service = null }
     }
@@ -53,6 +69,7 @@ class DriftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun play(sound: Sound) = service?.play(sound)
+    fun resumeLastMix() = service?.resumeLastMix(catalog, _lastMix.value.map { it.id })
     fun addLayer(sound: Sound) = service?.addLayer(sound)
     fun removeLayer(id: String) = service?.removeLayer(id)
     fun setLayerVolume(id: String, v: Float) = service?.setLayerVolume(id, v)

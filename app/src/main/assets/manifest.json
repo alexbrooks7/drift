@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "sounds": [
     {
       "id": "ocean_waves",
@@ -8,6 +8,54 @@
       "audio": "sounds/ocean_waves.ogg",
       "image": "images/ocean_waves.jpg",
       "defaultVolume": 0.8
+    },
+    {
+      "id": "rain",
+      "title": "Rain",
+      "category": "Nature",
+      "audio": "sounds/rain.ogg",
+      "image": "images/rain.jpg",
+      "defaultVolume": 0.7
+    },
+    {
+      "id": "stream",
+      "title": "Stream",
+      "category": "Nature",
+      "audio": "sounds/stream.ogg",
+      "image": "images/stream.jpg",
+      "defaultVolume": 0.65
+    },
+    {
+      "id": "wind",
+      "title": "Wind",
+      "category": "Nature",
+      "audio": "sounds/wind.ogg",
+      "image": "images/wind.jpg",
+      "defaultVolume": 0.6
+    },
+    {
+      "id": "thunder",
+      "title": "Distant Thunder",
+      "category": "Nature",
+      "audio": "sounds/thunder.ogg",
+      "image": "images/thunder.jpg",
+      "defaultVolume": 0.8
+    },
+    {
+      "id": "fireplace",
+      "title": "Fireplace",
+      "category": "Ambient",
+      "audio": "sounds/fireplace.ogg",
+      "image": "images/fireplace.jpg",
+      "defaultVolume": 0.7
+    },
+    {
+      "id": "fan",
+      "title": "Fan",
+      "category": "Ambient",
+      "audio": "sounds/fan.ogg",
+      "image": "images/fan.jpg",
+      "defaultVolume": 0.55
     },
     {
       "id": "white_noise",

@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <!-- Simple broadcast/signal glyph for the persistent "sharing active"
+         notification — a node with two arcs of signal above it. Status bar
+         icons must be a flat white silhouette, hence the single fill color. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,15.5m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M8.5,12 C9.8,10.6 11.5,10.6 12,10.6 C12.5,10.6 14.2,10.6 15.5,12" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M5.5,9 C7.5,6.8 9.8,6.8 12,6.8 C14.2,6.8 16.5,6.8 18.5,9" />
+</vector>

@@ -1,7 +1,9 @@
 package com.drift.tv.ui.theme
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
@@ -31,7 +33,12 @@ fun DriftTheme(content: @Composable () -> Unit) {
             primary = AccentViolet,
             onPrimary = Void,
             secondary = AccentMagenta,
+            onBackground = Moonlight,
         ),
-        content = content
-    )
+    ) {
+        // tv-material3 only sets LocalContentColor inside a Surface, and its
+        // default is black — so any Text we draw straight onto the background
+        // (screen headings, the mix-picker overlay) would be invisible.
+        CompositionLocalProvider(LocalContentColor provides Moonlight, content = content)
+    }
 }

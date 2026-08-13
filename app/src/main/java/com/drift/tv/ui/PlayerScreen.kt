@@ -1,20 +1,25 @@
 package com.drift.tv.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,11 +28,16 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -43,6 +53,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.drift.tv.analytics.DriftAnalytics
 import com.drift.tv.data.Sound
 import com.drift.tv.playback.LayerState
 import com.drift.tv.playback.TimerState
@@ -53,7 +64,11 @@ import kotlinx.coroutines.delay
 
 private val TIMER_CHOICES = listOf(15, 30, 45, 60, 90)
 private const val PEEK_MS = 4_000L
-private const val CONTROLS_AUTOHIDE_MS = 6_000L
+// 6s was too twitchy in practice — you lose the controls while still reaching
+// for the remote in the dark.
+private const val CONTROLS_AUTOHIDE_MS = 12_000L
+/** Idle time after the controls fade before the screen blacks itself out. */
+private const val AUTO_LIGHTS_OUT_MS = 60_000L
 
 @Composable
 fun PlayerScreen(
@@ -77,15 +92,25 @@ fun PlayerScreen(
     var showMixPicker by remember { mutableStateOf(false) }
     var showTimerPicker by remember { mutableStateOf(false) }
     val rootFocus = remember { FocusRequester() }
+    val controlsFocus = remember { FocusRequester() }
 
     LaunchedEffect(dimmed) { onDimChanged(dimmed) }
 
-    LaunchedEffect(lastInteraction, dimmed) {
-        if (!dimmed) {
-            controlsVisible = true
-            delay(CONTROLS_AUTOHIDE_MS)
-            controlsVisible = false
-        }
+    LaunchedEffect(lastInteraction, dimmed, showMixPicker) {
+        if (dimmed) return@LaunchedEffect
+        controlsVisible = true
+        // While the picker owns the screen, don't run the idle cycle at all:
+        // hiding the bar would start swallowing the picker's own key presses,
+        // and blacking out mid-choice is just rude.
+        if (showMixPicker) return@LaunchedEffect
+        delay(CONTROLS_AUTOHIDE_MS)
+        controlsVisible = false
+        // The point of the app is to fall asleep, so don't make the user walk
+        // to the moon button — put the remote down and the room goes dark on
+        // its own. Any key press restarts this from the top.
+        delay(AUTO_LIGHTS_OUT_MS)
+        dimmed = true
+        DriftAnalytics.event("lights_out_triggered", mapOf("trigger" to "auto_idle"))
     }
 
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -94,12 +119,31 @@ fun PlayerScreen(
     }
     val peeking = dimmed && now < peekUntil
 
-    LaunchedEffect(dimmed) { if (dimmed) rootFocus.requestFocus() }
+    // Something must always hold focus, or the remote goes dead: with nothing
+    // focused Compose never sees the key events at all, so even BACK stops
+    // working. The control bar holds it normally (it stays composed even while
+    // faded out); the root box only takes over for lights-out, where it swallows
+    // every key to keep a stray press from firing a control in the dark.
+    LaunchedEffect(dimmed, showMixPicker) {
+        when {
+            dimmed -> runCatching { rootFocus.requestFocus() }
+            showMixPicker -> Unit  // the picker focuses itself
+            else -> runCatching { controlsFocus.requestFocus() }
+        }
+    }
 
     Box(
         Modifier
             .fillMaxSize()
             .focusRequester(rootFocus)
+            // This full-screen box is an invisible focus target, so arrowing off
+            // the edge of the control bar can land here and strand the user. If
+            // that happens while the controls are up, bounce focus back to them.
+            .onFocusChanged { state ->
+                if (state.isFocused && !dimmed && !showMixPicker) {
+                    runCatching { controlsFocus.requestFocus() }
+                }
+            }
             .focusable()
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -107,6 +151,9 @@ fun PlayerScreen(
                 when {
                     dimmed && event.key == Key.Back -> { dimmed = false; true }
                     dimmed -> { peekUntil = System.currentTimeMillis() + PEEK_MS; true }
+                    // Controls faded out: swallow the key so it only brings them
+                    // back rather than blind-firing whatever still holds focus.
+                    !controlsVisible && event.key != Key.Back -> true
                     event.key == Key.Back && showMixPicker -> { showMixPicker = false; true }
                     event.key == Key.Back && showTimerPicker -> { showTimerPicker = false; true }
                     event.key == Key.Back -> { onBack(); true }
@@ -116,21 +163,34 @@ fun PlayerScreen(
     ) {
         AssetImage(primary.sound.image, primary.sound.title, Modifier.fillMaxSize())
 
-        AnimatedVisibility(
-            visible = controlsVisible && !dimmed,
-            enter = fadeIn(tween(300)), exit = fadeOut(tween(600)),
-            modifier = Modifier.align(Alignment.BottomCenter)
+        // Faded rather than removed from composition: AnimatedVisibility would
+        // destroy whichever control holds focus, and with nothing focused
+        // Compose stops receiving key events entirely — the remote goes dead
+        // and even BACK stops working.
+        val controlsAlpha by animateFloatAsState(
+            targetValue = if (controlsVisible && !dimmed) 1f else 0f,
+            animationSpec = tween(if (controlsVisible && !dimmed) 300 else 600),
+            label = "controlsAlpha",
+        )
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .alpha(controlsAlpha)
         ) {
             ControlBar(
                 layers = layers,
                 timer = timer,
                 isPlaying = isPlaying,
+                defaultFocus = controlsFocus,
                 showTimerPicker = showTimerPicker,
                 onToggleTimerPicker = { showTimerPicker = !showTimerPicker },
                 onTogglePlayPause = onTogglePlayPause,
                 onSetTimer = { onSetTimer(it); showTimerPicker = false },
                 onMix = { showMixPicker = true },
-                onLightsOut = { dimmed = true },
+                onLightsOut = {
+                    dimmed = true
+                    DriftAnalytics.event("lights_out_triggered", mapOf("trigger" to "manual"))
+                },
                 onRemoveLayer = onRemoveLayer,
                 onLayerVolume = onLayerVolume,
             )
@@ -181,6 +241,7 @@ private fun ControlBar(
     layers: List<LayerState>,
     timer: TimerState?,
     isPlaying: Boolean,
+    defaultFocus: FocusRequester,
     showTimerPicker: Boolean,
     onToggleTimerPicker: () -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -193,6 +254,9 @@ private fun ControlBar(
     Column(
         Modifier
             .fillMaxWidth()
+            // Keeps D-pad search inside the bar (same idiom HomeScreen uses for
+            // its rows) so arrowing past an edge doesn't drop focus altogether.
+            .focusGroup()
             .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0150F24))))
             .padding(horizontal = 48.dp, vertical = 20.dp)
     ) {
@@ -220,7 +284,10 @@ private fun ControlBar(
             horizontalArrangement = Arrangement.spacedBy(18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(onClick = onTogglePlayPause) { Text(if (isPlaying) "Pause" else "Play") }
+            Button(
+                onClick = onTogglePlayPause,
+                modifier = Modifier.focusRequester(defaultFocus)
+            ) { Text(if (isPlaying) "Pause" else "Play") }
             Button(onClick = onMix) { Text("Mix another sound") }
             TimerRing(timer = timer, onClick = onToggleTimerPicker)
             MoonButton(onClick = onLightsOut)
@@ -319,43 +386,104 @@ private fun LayerRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .onPreviewKeyEvent { e ->
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // The handler has to sit on the focusable node itself. On the Row it is
+        // an ancestor of the focus target, and D-pad focus search claims the
+        // arrow keys first — so "◀ ▶ to adjust" just moved focus off the row.
+        Button(
+            // Removal is long-press only: this button is also the volume focus
+            // target, and a stray OK used to drop the layer with no undo.
+            onClick = {},
+            onLongClick = { if (removable) onRemove() },
+            modifier = Modifier.onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (e.key) {
                     Key.DirectionLeft -> { onVolume((layer.volume - 0.05f).coerceAtLeast(0f)); true }
                     Key.DirectionRight -> { onVolume((layer.volume + 0.05f).coerceAtMost(1f)); true }
                     else -> false
                 }
-            },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Button(onClick = { if (removable) onRemove() }) {
-            Text(if (removable) "✕ ${layer.sound.title}" else layer.sound.title)
+            }
+        ) {
+            Text(layer.sound.title)
         }
-        Text("Volume ${(layer.volume * 100).toInt()}%   (◀ ▶ to adjust)",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        VolumeBar(layer.volume)
+        Text(
+            if (removable) "◀ ▶ volume   ·   hold OK to remove" else "◀ ▶ volume",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** A level bar reads at 10 feet; a percentage doesn't. */
+@Composable
+private fun VolumeBar(volume: Float) {
+    Canvas(Modifier.size(width = 132.dp, height = 6.dp)) {
+        val r = size.height / 2
+        drawRoundRect(
+            color = Color(0xFF3A3260),
+            cornerRadius = CornerRadius(r, r),
+        )
+        if (volume > 0f) {
+            drawRoundRect(
+                brush = Brush.horizontalGradient(listOf(AccentViolet, AccentMagenta)),
+                size = Size(size.width * volume, size.height),
+                cornerRadius = CornerRadius(r, r),
+            )
+        }
     }
 }
 
 @Composable
 private fun MixPicker(catalog: List<Sound>, onPick: (Sound) -> Unit) {
+    val firstChoice = remember { FocusRequester() }
+    // Without this the picker opens with nothing focused and the D-pad is dead.
+    LaunchedEffect(catalog.isEmpty()) {
+        if (catalog.isNotEmpty()) {
+            repeat(5) {
+                if (runCatching { firstChoice.requestFocus() }.isSuccess) return@LaunchedEffect
+                withFrameNanos {}
+            }
+        }
+    }
+
     Column(
         Modifier
             .fillMaxSize()
             .background(Color(0xE0150F24))
-            .padding(64.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+            .padding(horizontal = 64.dp, vertical = 36.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             "Add a layer",
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+            modifier = Modifier.padding(bottom = 16.dp)
         )
-        catalog.forEach { s -> Button(onClick = { onPick(s) }) { Text(s.title) } }
-        if (catalog.isEmpty()) Text("All sounds are already in the mix.")
+        if (catalog.isEmpty()) {
+            Text("All sounds are already in the mix.")
+        } else {
+            // Has to scroll: the catalog outgrew a single screen of buttons, and
+            // a plain Column silently clipped the last few sounds off-screen.
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .focusGroup(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(vertical = 8.dp),
+            ) {
+                itemsIndexed(catalog, key = { _, s -> s.id }) { i, s ->
+                    Button(
+                        onClick = { onPick(s) },
+                        modifier = if (i == 0) Modifier.focusRequester(firstChoice) else Modifier
+                    ) { Text(s.title) }
+                }
+            }
+        }
     }
 }
 
