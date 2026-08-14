@@ -8,17 +8,22 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.10"
-      # Android SDK is preinstalled on ubuntu-latest runners
+      # No gradle-version here on purpose: setup-gradle uses the repo's own
+      # wrapper (gradle/wrapper/gradle-wrapper.properties), so CI builds with
+      # exactly the Gradle the project is developed against. Pinning a
+      # separate version here is how this broke — it was fixed at 8.10 while
+      # AGP moved to 8.9.1, which requires Gradle 8.11.1 or newer.
+      - uses: gradle/actions/setup-gradle@v6
+      # Android SDK is preinstalled on ubuntu-latest runners.
+      # local.properties is absent on CI, so the PostHog and Pawns keys are
+      # blank and both features build disabled — that's the intended default.
       - name: Build debug APK
-        run: gradle :app:assembleDebug
+        run: ./gradlew :app:assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
