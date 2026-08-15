@@ -35,12 +35,12 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import com.drift.tv.sharing.PawnsManager
+import com.drift.tv.sharing.SharingStatus
 import com.drift.tv.ui.theme.AccentMagenta
 import com.drift.tv.ui.theme.AccentViolet
 import com.drift.tv.ui.theme.MoonDim
 import com.drift.tv.ui.theme.MoonWhite
 import com.drift.tv.ui.theme.Panel
-import com.pawns.sdk.common.dto.ServiceState
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -58,18 +58,20 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val stateFlow = remember { PawnsManager.serviceState() ?: MutableStateFlow(ServiceState.Off) }
-    val serviceState by stateFlow.collectAsState(ServiceState.Off)
+    val stateFlow = remember { PawnsManager.sharingStatus() ?: MutableStateFlow(SharingStatus.Off) }
+    val sharingState by stateFlow.collectAsState(SharingStatus.Off)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 
-    val active = serviceState is ServiceState.On || serviceState is ServiceState.Launched.Running
-    val status = when (val s = serviceState) {
-        is ServiceState.Off -> "Off — nothing is being shared"
-        is ServiceState.On -> "Active — this device is sharing its connection"
-        is ServiceState.Launched.Running -> "Active — this device is sharing its connection"
-        is ServiceState.Launched.LowBattery -> "Paused — battery is low"
-        is ServiceState.Launched.Error -> "Not sharing — ${s.error}"
+    val active = sharingState is SharingStatus.Active
+    val status = when (val s = sharingState) {
+        is SharingStatus.Off -> "Off — nothing is being shared"
+        is SharingStatus.Active -> "Active — this device is sharing its connection"
+        is SharingStatus.LowBattery -> "Paused — battery is low"
+        // The SDK's own wording, surfaced verbatim. "This IP is already in use"
+        // is the one people actually hit, and paraphrasing it would make it
+        // harder to act on.
+        is SharingStatus.Error -> "Not sharing — ${s.reason}"
     }
 
     Column(

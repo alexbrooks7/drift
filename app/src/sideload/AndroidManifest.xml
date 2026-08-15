@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sideload-only additions for the Pawns bandwidth-sharing SDK.
+
+  These are kept out of the main manifest on purpose: the store flavor must
+  not declare the special-use foreground service permission or the peer
+  service, because Google Play and the Amazon Appstore both prohibit this
+  class of SDK. Merged into sideload builds only.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Required by the Pawns peer service on API 34+. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <application>
+        <!-- Only ever started after the person explicitly accepts the consent
+             dialog. Foreground rather than background, so a persistent,
+             visible notification stays up the entire time sharing is active:
+             nobody should have to wonder whether it's still running. -->
+        <service
+            android:name="com.pawns.sdk.internal.service.PeerServiceForeground"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Allows to share internet traffic by modifying device's network settings to be used as a gateway for internet traffic. Device becomes a gateway which allows to send and receive internet traffic." />
+        </service>
+        <meta-data
+            android:name="com.pawns.sdk.pawns_service_channel_name"
+            android:value="Internet Sharing" />
+    </application>
+</manifest>

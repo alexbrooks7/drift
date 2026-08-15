@@ -40,14 +40,18 @@ Structural borrows, adapted for a 10-foot D-pad UI:
 
 Open the project in Android Studio (Ladybug+) or run:
 
-    ./gradlew :app:assembleDebug      # or :app:assembleRelease — both are
-                                       # auto-signed with the debug keystore
-                                       # and installable as-is, no store setup
+    ./gradlew :app:assembleSideloadDebug     # the full app, sharing SDK included
+    ./gradlew :app:assembleStoreDebug        # store-safe: no sharing SDK at all
 
-Install with `adb install app/build/outputs/apk/debug/app-debug.apk` (or the
-`release/app-release.apk` path for the release variant). minSdk 26, target 35.
-The Gradle wrapper is committed (pinned to 9.4.1), so `./gradlew` works on a
-fresh clone with no local Gradle install.
+Both are auto-signed with the debug keystore and installable as-is, no store
+setup. Release variants (`assembleSideloadRelease` / `assembleStoreRelease`)
+are signed the same way — fine for sideloading, but see **Build flavors**
+below before submitting to a store.
+
+Output paths follow the flavor, e.g.
+`app/build/outputs/apk/sideload/debug/app-sideload-debug.apk`.
+minSdk 26, target 35. The Gradle wrapper is committed (pinned to 9.4.1), so
+`./gradlew` works on a fresh clone with no local Gradle install.
 
 This project is set up for direct APK installs only (no Play Store submission).
 See **Sideloading** below for the two settings you need to flip on the TV
@@ -187,6 +191,44 @@ To sideload on Android TV / Fire TV: enable installs from unknown sources in
 the device's settings, then either open the downloaded file with a file
 manager, or `adb install -r Drift.apk`. On Fire TV the Downloader app takes
 the URL above directly.
+
+## Build flavors
+
+Two distribution channels with different legal constraints, so the project
+builds two variants:
+
+| Flavor | Channel | Sharing SDK | applicationId | Release APK |
+|---|---|---|---|---|
+| `sideload` | GitHub releases, direct APK | included | `com.drift.tv` | ~85 MB |
+| `store` | Google Play, Amazon Appstore | **absent** | `com.drift.tv.store` | ~17 MB |
+
+```bash
+./gradlew assembleSideloadRelease   # app/build/outputs/apk/sideload/release/
+./gradlew assembleStoreRelease      # app/build/outputs/apk/store/release/
+```
+
+Google Play's Device and Network Abuse policy and the Amazon Appstore's
+equivalent both prohibit SDKs that route third-party traffic through a user's
+connection. **Leaving `pawns.apiKey` blank is not sufficient for those
+stores** — that only disables the SDK at runtime, and
+`libpawns_mobile_sdk.so` plus the rest of the native relay libraries would
+still be sitting in the APK for a reviewer to find.
+
+So the dependency is declared `sideloadImplementation`. For the store flavor
+the SDK is not on the classpath at all: no native libraries, no
+`FOREGROUND_SERVICE_SPECIAL_USE` permission, no peer service in the merged
+manifest, and zero `com/pawns` references in the DEX. Verified by unzipping
+the built APK, not just assumed.
+
+The two flavors share all UI. `PawnsManager` has a per-flavor implementation
+(`src/sideload/` real, `src/store/` a no-op with the same API), and shared
+code talks to a Drift-owned `SharingStatus` type rather than the SDK's own
+`ServiceState`, so nothing in `src/main/` references the SDK. In store builds
+`PawnsManager.available` is false, which already hides the settings entry and
+suppresses the consent prompt — the sharing feature simply doesn't exist there.
+
+The differing `applicationId` lets both be installed side by side for testing,
+and keeps a store listing from colliding with the directly-distributed APK.
 
 ## Internet sharing
 

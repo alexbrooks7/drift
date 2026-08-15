@@ -8,9 +8,9 @@ class DriftApp : Application() {
     override fun onCreate() {
         super.onCreate()
         DriftAnalytics.init(this)
-        // Configures the SDK only — never starts sharing by itself. Actual
-        // sharing only begins from PawnsManager.grantConsent(), reached
-        // through ConsentScreen's explicit "Share" choice.
+        // Configures the SDK only — never starts sharing by itself. Sharing
+        // begins only from an explicit "Okay" in ConsentDialog, or Turn on in
+        // Settings. In the store flavor this is a no-op: there's no SDK there.
         PawnsManager.init(this)
     }
 }

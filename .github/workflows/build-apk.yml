@@ -16,16 +16,40 @@ jobs:
       # No gradle-version here on purpose: setup-gradle uses the repo's own
       # wrapper (gradle/wrapper/gradle-wrapper.properties), so CI builds with
       # exactly the Gradle the project is developed against. Pinning a
-      # separate version here is how this broke — it was fixed at 8.10 while
-      # AGP moved to 8.9.1, which requires Gradle 8.11.1 or newer.
+      # separate version here is how this broke once — it was fixed at 8.10
+      # while AGP moved to 8.9.1, which requires Gradle 8.11.1 or newer.
       - uses: gradle/actions/setup-gradle@v6
+      # Both flavors, so a change that breaks either is caught. The store
+      # flavor especially: it compiles without the Pawns SDK on the classpath,
+      # which is easy to break by adding an SDK reference to shared code.
       # Android SDK is preinstalled on ubuntu-latest runners.
       # local.properties is absent on CI, so the PostHog and Pawns keys are
       # blank and both features build disabled — that's the intended default.
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug
-      - name: Upload APK
+      - name: Build both flavors
+        run: ./gradlew :app:assembleSideloadDebug :app:assembleStoreDebug
+
+      # Guards the whole point of the store flavor: if the sharing SDK ever
+      # leaks back into it, fail loudly here rather than at store review.
+      - name: Verify store build contains no sharing SDK
+        run: |
+          APK=app/build/outputs/apk/store/debug/app-store-debug.apk
+          if unzip -l "$APK" | grep -qi "libpawns"; then
+            echo "::error::Pawns native libraries found in the store APK"
+            exit 1
+          fi
+          if unzip -l "$APK" | grep -qi "pawns"; then
+            echo "::error::Pawns entries found in the store APK"
+            exit 1
+          fi
+          echo "OK: no Pawns artifacts in $APK"
+
+      - name: Upload sideload APK
         uses: actions/upload-artifact@v4
         with:
-          name: drift-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: drift-sideload-debug-apk
+          path: app/build/outputs/apk/sideload/debug/app-sideload-debug.apk
+      - name: Upload store APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-store-debug-apk
+          path: app/build/outputs/apk/store/debug/app-store-debug.apk

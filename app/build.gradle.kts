@@ -43,6 +43,32 @@ android {
         buildConfigField("String", "POSTHOG_HOST", "\"$postHogHost\"")
         buildConfigField("String", "PAWNS_API_KEY", "\"$pawnsApiKey\"")
     }
+    // Two distribution channels with different legal constraints:
+    //
+    //  sideload — GitHub releases / direct APK. Includes the Pawns
+    //             bandwidth-sharing SDK, behind explicit opt-in consent.
+    //  store    — Google Play and the Amazon Appstore, which both prohibit
+    //             SDKs that route third-party traffic through a user's
+    //             connection. The dependency is declared sideloadImplementation
+    //             below, so for this flavor the SDK isn't on the classpath and
+    //             its ~65MB of native relay libraries are never packaged. A
+    //             blank API key would not have been enough — that only disables
+    //             the SDK at runtime, leaving the libraries in the APK for a
+    //             reviewer to find.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("sideload") {
+            dimension = "distribution"
+        }
+        create("store") {
+            dimension = "distribution"
+            // Distinct id so a store build and a sideloaded build can coexist
+            // on one device, and so store listings never collide with the
+            // directly-distributed APK.
+            applicationIdSuffix = ".store"
+        }
+    }
+
     buildTypes {
         release {
             // Sideload-only: reuse the auto-generated debug keystore so
@@ -85,5 +111,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.posthog.android)
-    implementation(libs.pawns.sdk)
+    // Sideload only — see the productFlavors block. This is what keeps the
+    // SDK and its native libraries out of store builds entirely.
+    "sideloadImplementation"(libs.pawns.sdk)
 }
