@@ -18,6 +18,18 @@ val postHogHost: String = localProps.getProperty("posthog.host", "https://us.i.p
 // doesn't ship a half-configured sharing feature.
 val pawnsApiKey: String = localProps.getProperty("pawns.apiKey", "")
 
+// Release signing, also from local.properties. Passwords must never be
+// committed, and the keystore file itself must never be committed — losing
+// or leaking it is unrecoverable for a published app. When these aren't set
+// the build falls back to the debug keystore, so a fresh clone still produces
+// an installable APK without anyone needing signing material.
+val releaseStoreFile: String = localProps.getProperty("release.storeFile", "")
+val releaseStorePassword: String = localProps.getProperty("release.storePassword", "")
+val releaseKeyAlias: String = localProps.getProperty("release.keyAlias", "")
+val releaseKeyPassword: String = localProps.getProperty("release.keyPassword", "")
+val hasReleaseSigning: Boolean =
+    releaseStoreFile.isNotBlank() && rootProject.file(releaseStoreFile).exists()
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -69,17 +81,38 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                // Both signature schemes: v1 keeps older Fire OS builds happy,
+                // v2 is what current Android verifies against.
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Sideload-only: reuse the auto-generated debug keystore so
-            // `assembleRelease` produces a directly-installable APK with no
-            // manual signing step. Minification is off too — there's no store
-            // size budget to chase, and skipping R8 avoids the class of
+            // Minification stays off — there's no store size budget worth
+            // chasing here, and skipping R8 avoids the class of
             // works-in-debug-breaks-in-release bugs (e.g. reflection-based
-            // kotlinx.serialization models) that normally only show up after
+            // kotlinx.serialization models) that otherwise only surface after
             // a store submission forces you to test the release build.
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            // Real keystore when local.properties supplies one; otherwise the
+            // debug keystore, which keeps `assembleRelease` working on a fresh
+            // clone for sideloading. Store submissions REQUIRE the real one —
+            // Play and Amazon both reject debug-signed uploads.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
     buildFeatures {

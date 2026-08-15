@@ -9,3 +9,11 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Signing material. Committing a keystore is unrecoverable — anyone with the
+# file and password can publish updates impersonating this app, and for a
+# published app you can't simply rotate it. Keep it out of the repo and back
+# it up somewhere private instead.
+*.jks
+*.keystore
+keystore.properties
