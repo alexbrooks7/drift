@@ -144,6 +144,11 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.posthog.android)
+    // Shared, not sideload-only: SharingWatchdogWorker lives in src/main so
+    // both flavors compile it, and it no-ops via PawnsManager.available in
+    // the store flavor — there's nothing to watch there, so nothing is ever
+    // scheduled. See work/SharingWatchdog.kt.
+    implementation(libs.androidx.work.runtime.ktx)
     // Sideload only — see the productFlavors block. This is what keeps the
     // SDK and its native libraries out of store builds entirely.
     "sideloadImplementation"(libs.pawns.sdk)

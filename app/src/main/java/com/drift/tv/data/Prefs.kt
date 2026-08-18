@@ -21,6 +21,7 @@ object Prefs {
     private val MIX = stringPreferencesKey("last_mix")
     private val TIMER = intPreferencesKey("last_timer_minutes")
     private val PAWNS_CONSENT_ASKED = booleanPreferencesKey("pawns_consent_asked")
+    private val SHARING_ENABLED = booleanPreferencesKey("sharing_enabled")
 
     suspend fun savedVolume(context: Context, sound: Sound): Float =
         context.dataStore.data.first()[volumeKey(sound.id)] ?: sound.defaultVolume
@@ -62,5 +63,25 @@ object Prefs {
 
     suspend fun setPawnsConsentAsked(context: Context) {
         context.dataStore.edit { it[PAWNS_CONSENT_ASKED] = true }
+    }
+
+    /**
+     * Whether the person wants sharing on, independent of the SDK's own
+     * consent bit and independent of whether the service actually happens to
+     * be running right now.
+     *
+     * `PawnsManager.hasConsent()` alone can't drive resume-on-launch or the
+     * boot receiver: it stays true after someone switches sharing off in
+     * Settings, since withdrawing consent entirely is a different act from
+     * pausing the feature. Resuming off that bit would quietly re-enable
+     * sharing the next time the app opens or the device reboots, overturning
+     * a deliberate opt-out. This flag is what SharingBootReceiver and
+     * SharingWatchdogWorker actually check.
+     */
+    suspend fun sharingEnabled(context: Context): Boolean =
+        context.dataStore.data.first()[SHARING_ENABLED] ?: false
+
+    suspend fun setSharingEnabled(context: Context, enabled: Boolean) {
+        context.dataStore.edit { it[SHARING_ENABLED] = enabled }
     }
 }

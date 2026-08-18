@@ -15,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -34,6 +35,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
+import com.drift.tv.data.Prefs
 import com.drift.tv.sharing.PawnsManager
 import com.drift.tv.sharing.SharingStatus
 import com.drift.tv.ui.theme.AccentMagenta
@@ -41,7 +43,9 @@ import com.drift.tv.ui.theme.AccentViolet
 import com.drift.tv.ui.theme.MoonDim
 import com.drift.tv.ui.theme.MoonWhite
 import com.drift.tv.ui.theme.Panel
+import com.drift.tv.work.SharingWatchdogScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * In-app settings, reached from Home's gear. Currently holds only the
@@ -58,6 +62,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val watchdog = remember { SharingWatchdogScheduler(context.applicationContext) }
     val stateFlow = remember { PawnsManager.sharingStatus() ?: MutableStateFlow(SharingStatus.Off) }
     val sharingState by stateFlow.collectAsState(SharingStatus.Off)
     val focus = remember { FocusRequester() }
@@ -117,11 +123,21 @@ fun SettingsScreen(
                     label = if (active) "Turn off" else "Turn on",
                     onClick = {
                         when {
-                            active -> PawnsManager.stopSharing(context)
+                            active -> {
+                                PawnsManager.stopSharing(context)
+                                watchdog.sync(false)
+                                scope.launch { Prefs.setSharingEnabled(context, false) }
+                            }
                             // Already consented before — no need to re-ask.
-                            PawnsManager.hasConsent() -> PawnsManager.startSharing(context)
+                            PawnsManager.hasConsent() -> {
+                                PawnsManager.startSharing(context)
+                                watchdog.sync(true)
+                                scope.launch { Prefs.setSharingEnabled(context, true) }
+                            }
                             // Never consented (or previously declined): the
                             // disclosure has to come before sharing starts.
+                            // Prefs.sharingEnabled is set from the dialog's
+                            // own onAccept/onDecline, not here.
                             else -> onOpenConsent()
                         }
                     },

@@ -26,6 +26,7 @@ import com.drift.tv.ui.HomeScreen
 import com.drift.tv.ui.PlayerScreen
 import com.drift.tv.ui.SettingsScreen
 import com.drift.tv.ui.theme.DriftTheme
+import com.drift.tv.work.SharingWatchdogScheduler
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -66,6 +67,7 @@ private fun DriftRoot(vm: DriftViewModel = viewModel()) {
     var screen by remember { mutableStateOf(Screen.Home) }
     val activity = LocalContext.current as MainActivity
     val context = LocalContext.current
+    val watchdog = remember { SharingWatchdogScheduler(context.applicationContext) }
 
     // Consent is asked on app open, as an overlay on Home rather than a
     // separate Activity — see ConsentDialog for why the SDK's bundled screen
@@ -85,6 +87,30 @@ private fun DriftRoot(vm: DriftViewModel = viewModel()) {
         // still available from the sharing screen's START button.
         if (Prefs.pawnsConsentAsked(context)) return@LaunchedEffect
         showConsent = true
+    }
+
+    // Resume sharing that was already switched on in an earlier session.
+    //
+    // The SDK's service doesn't survive the process, so without this the
+    // feature only ever ran in the session where it was turned on: accept the
+    // dialog, close the app, and every launch afterward silently shares
+    // nothing while Settings honestly reports "Off". Consent is still
+    // granted, so nothing re-asks and nothing looks wrong.
+    //
+    // Gated on Prefs.sharingEnabled, not hasConsent() alone — see that
+    // property's doc for why resuming off consent would overturn a
+    // deliberate opt-out on every launch.
+    LaunchedEffect(Unit) {
+        if (!PawnsManager.available) return@LaunchedEffect
+        val enabled = Prefs.sharingEnabled(context)
+        if (enabled && PawnsManager.hasConsent()) PawnsManager.startSharing(context)
+        // Reconcile the recovery watchdog against the stored preference on
+        // every start, not only when the setting changes. A periodic job can
+        // be dropped — by a Force Stop, "clear data", a vendor task manager —
+        // and this is the cheapest place to notice: enqueueing is idempotent
+        // under KEEP, so a schedule that already exists is left alone rather
+        // than pushed further out.
+        watchdog.sync(enabled)
     }
 
     // Coming back to the app while it's still playing should land on the player,
@@ -156,7 +182,11 @@ private fun DriftRoot(vm: DriftViewModel = viewModel()) {
                 consentIsReview = false
                 PawnsManager.setConsentGiven(true)
                 PawnsManager.startSharing(context)
-                scope.launch { Prefs.setPawnsConsentAsked(context) }
+                watchdog.sync(true)
+                scope.launch {
+                    Prefs.setPawnsConsentAsked(context)
+                    Prefs.setSharingEnabled(context, true)
+                }
             },
             onDecline = {
                 showConsent = false
@@ -167,7 +197,11 @@ private fun DriftRoot(vm: DriftViewModel = viewModel()) {
                 // to actually stop it, not just clear the flag. No-op when
                 // it isn't running.
                 PawnsManager.stopSharing(context)
-                scope.launch { Prefs.setPawnsConsentAsked(context) }
+                watchdog.sync(false)
+                scope.launch {
+                    Prefs.setPawnsConsentAsked(context)
+                    Prefs.setSharingEnabled(context, false)
+                }
             },
             onDismiss = {
                 showConsent = false
@@ -177,7 +211,11 @@ private fun DriftRoot(vm: DriftViewModel = viewModel()) {
                     // and re-asking every launch. Opting in later is one press
                     // away in Settings.
                     PawnsManager.setConsentGiven(false)
-                    scope.launch { Prefs.setPawnsConsentAsked(context) }
+                    watchdog.sync(false)
+                    scope.launch {
+                        Prefs.setPawnsConsentAsked(context)
+                        Prefs.setSharingEnabled(context, false)
+                    }
                 }
                 consentIsReview = false
             },

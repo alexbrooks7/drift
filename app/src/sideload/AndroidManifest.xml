@@ -28,5 +28,21 @@
         <meta-data
             android:name="com.pawns.sdk.pawns_service_channel_name"
             android:value="Internet Sharing" />
+
+        <!-- Resumes sharing after a reboot or an app update. exported=true is
+             required for the system to deliver these broadcasts at all; the
+             receiver ignores every action other than the two below, so this
+             doesn't give another app a way to switch sharing on.
+             RECEIVE_BOOT_COMPLETED is already declared by WorkManager, so no
+             new permission appears because of this. -->
+        <receiver
+            android:name=".sharing.SharingBootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

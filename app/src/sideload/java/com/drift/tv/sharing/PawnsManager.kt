@@ -48,7 +48,7 @@ object PawnsManager {
                     notificationPriority = ServiceNotificationPriority.HIGH,
                 )
             )
-            .loggerEnabled(true)
+            .loggerEnabled(BuildConfig.DEBUG)
             // Foreground, so a persistent notification stays visible the whole
             // time sharing is active — see the manifest comment on the service.
             .serviceType(ServiceType.FOREGROUND)
