@@ -57,7 +57,7 @@ fun HomeScreen(
     lastMix: List<Sound>,
     onSelect: (Sound) -> Unit,
     onResumeMix: () -> Unit,
-    /** Null hides the settings entry entirely — see PawnsManager.available. */
+    /** Null hides the settings entry entirely — see BrightManager.available. */
     onOpenSettings: (() -> Unit)? = null,
 ) {
     var selectedCategory by remember { mutableStateOf(ALL) }

@@ -19,14 +19,13 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.drift.tv.analytics.DriftAnalytics
 import com.drift.tv.data.Prefs
-import com.drift.tv.sharing.PawnsManager
+import com.drift.tv.sharing.BrightManager
 import com.drift.tv.ui.ConsentDialog
 import com.drift.tv.ui.DriftViewModel
 import com.drift.tv.ui.HomeScreen
 import com.drift.tv.ui.PlayerScreen
 import com.drift.tv.ui.SettingsScreen
 import com.drift.tv.ui.theme.DriftTheme
-import com.drift.tv.work.SharingWatchdogScheduler
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -41,6 +40,13 @@ class MainActivity : ComponentActivity() {
             systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
+
+        // Per Bright's own integration guide: init() must run exactly once,
+        // guarded on savedInstanceState rather than called from Application
+        // (unlike Pawns, this SDK's init takes an Activity, not a bare
+        // Context — it needs one to eventually host its consent screen).
+        // No-op in the store flavor and whenever bright.appId is unset.
+        if (savedInstanceState == null) BrightManager.init(this)
 
         setContent { DriftTheme { DriftRoot() } }
     }
@@ -67,11 +73,12 @@ private fun DriftRoot(vm: DriftViewModel = viewModel()) {
     var screen by remember { mutableStateOf(Screen.Home) }
     val activity = LocalContext.current as MainActivity
     val context = LocalContext.current
-    val watchdog = remember { SharingWatchdogScheduler(context.applicationContext) }
 
     // Consent is asked on app open, as an overlay on Home rather than a
-    // separate Activity — see ConsentDialog for why the SDK's bundled screen
-    // isn't used here.
+    // separate Activity — see ConsentDialog for why. Unlike Pawns, this isn't
+    // the actual consent capture: it's a priming screen that leads into
+    // Bright's own consent screen, which is the only place a "yes" can
+    // actually be recorded — see BrightManager's class doc for why.
     var showConsent by remember { mutableStateOf(false) }
     // Same dialog serves two entry points, and BACK has to mean different
     // things in each: dismissing the first-run prompt is an answer (the safe
@@ -79,39 +86,19 @@ private fun DriftRoot(vm: DriftViewModel = viewModel()) {
     // an existing choice untouched.
     var consentIsReview by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        if (!PawnsManager.available || PawnsManager.hasConsent()) return@LaunchedEffect
-        // Ask once, not every launch. The SDK stores only a binary "consent
-        // given", so `isConsentGiven()` reads the same false whether the
-        // prompt was declined or never shown — auto-prompting off it alone
-        // re-asks on every open forever after a decline. Opting in later is
-        // still available from the sharing screen's START button.
-        if (Prefs.pawnsConsentAsked(context)) return@LaunchedEffect
+        if (!BrightManager.available || BrightManager.hasConsent(context)) return@LaunchedEffect
+        // Ask once, not every launch — see Prefs.brightConsentAsked for why
+        // checking the SDK's own choice alone isn't enough. Opting in later
+        // is still available from "Review what this shares" in Settings.
+        if (Prefs.brightConsentAsked(context)) return@LaunchedEffect
         showConsent = true
     }
 
-    // Resume sharing that was already switched on in an earlier session.
-    //
-    // The SDK's service doesn't survive the process, so without this the
-    // feature only ever ran in the session where it was turned on: accept the
-    // dialog, close the app, and every launch afterward silently shares
-    // nothing while Settings honestly reports "Off". Consent is still
-    // granted, so nothing re-asks and nothing looks wrong.
-    //
-    // Gated on Prefs.sharingEnabled, not hasConsent() alone — see that
-    // property's doc for why resuming off consent would overturn a
-    // deliberate opt-out on every launch.
-    LaunchedEffect(Unit) {
-        if (!PawnsManager.available) return@LaunchedEffect
-        val enabled = Prefs.sharingEnabled(context)
-        if (enabled && PawnsManager.hasConsent()) PawnsManager.startSharing(context)
-        // Reconcile the recovery watchdog against the stored preference on
-        // every start, not only when the setting changes. A periodic job can
-        // be dropped — by a Force Stop, "clear data", a vendor task manager —
-        // and this is the cheapest place to notice: enqueueing is idempotent
-        // under KEEP, so a schedule that already exists is left alone rather
-        // than pushed further out.
-        watchdog.sync(enabled)
-    }
+    // Nothing to resume here, unlike Pawns: Bright's SDK persists its own
+    // peer state and resumes it itself after a reboot, an app update, or a
+    // process kill — own boot receiver, own foreground service, own
+    // JobScheduler watchdog, all declared in its AAR's own manifest. See
+    // app/src/sideload/AndroidManifest.xml.
 
     // Coming back to the app while it's still playing should land on the player,
     // not make the user re-pick a sound that's already running.
@@ -167,41 +154,30 @@ private fun DriftRoot(vm: DriftViewModel = viewModel()) {
                 vm.resumeLastMix()
                 screen = Screen.Player
             },
-            onOpenSettings = if (PawnsManager.available) {
+            onOpenSettings = if (BrightManager.available) {
                 { screen = Screen.Settings }
             } else null,
         )
     }
 
     // Drawn last so it sits above Home, matching the reference's dialog-over-
-    // content layout. Either answer is recorded so the prompt isn't shown again.
+    // content layout. "Okay" doesn't grant consent itself — it hands off to
+    // Bright's own (restyled) consent screen, where the actual choice is
+    // made; "No thanks" and a first-run BACK both record a decline directly,
+    // since opting out is a plain API call unlike opting in.
     if (showConsent) {
         ConsentDialog(
             onAccept = {
                 showConsent = false
                 consentIsReview = false
-                PawnsManager.setConsentGiven(true)
-                PawnsManager.startSharing(context)
-                watchdog.sync(true)
-                scope.launch {
-                    Prefs.setPawnsConsentAsked(context)
-                    Prefs.setSharingEnabled(context, true)
-                }
+                scope.launch { Prefs.setBrightConsentAsked(context) }
+                BrightManager.showConsent(activity)
             },
             onDecline = {
                 showConsent = false
                 consentIsReview = false
-                PawnsManager.setConsentGiven(false)
-                // Also reached via Settings → "Review what this shares", where
-                // sharing may be running right now — withdrawing consent has
-                // to actually stop it, not just clear the flag. No-op when
-                // it isn't running.
-                PawnsManager.stopSharing(context)
-                watchdog.sync(false)
-                scope.launch {
-                    Prefs.setPawnsConsentAsked(context)
-                    Prefs.setSharingEnabled(context, false)
-                }
+                BrightManager.optOut(context)
+                scope.launch { Prefs.setBrightConsentAsked(context) }
             },
             onDismiss = {
                 showConsent = false
@@ -210,12 +186,8 @@ private fun DriftRoot(vm: DriftViewModel = viewModel()) {
                     // the privacy-safe answer rather than leaving it unanswered
                     // and re-asking every launch. Opting in later is one press
                     // away in Settings.
-                    PawnsManager.setConsentGiven(false)
-                    watchdog.sync(false)
-                    scope.launch {
-                        Prefs.setPawnsConsentAsked(context)
-                        Prefs.setSharingEnabled(context, false)
-                    }
+                    BrightManager.optOut(context)
+                    scope.launch { Prefs.setBrightConsentAsked(context) }
                 }
                 consentIsReview = false
             },

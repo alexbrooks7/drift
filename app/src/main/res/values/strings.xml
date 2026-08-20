@@ -1,6 +1,4 @@
 <resources>
     <string name="app_name">Drift</string>
     <string name="playback_channel_name">Playback</string>
-    <string name="pawns_service_name">Sharing your internet</string>
-    <string name="pawns_service_body">Tap to review or turn off in Drift settings</string>
 </resources>

@@ -12,11 +12,13 @@ val localProps = Properties().apply {
 }
 val postHogApiKey: String = localProps.getProperty("posthog.apiKey", "")
 val postHogHost: String = localProps.getProperty("posthog.host", "https://us.i.posthog.com")
-// Pawns.app bandwidth-sharing SDK — same reasoning as the PostHog key above.
-// Blank by default: PawnsManager treats a blank key as "feature not
-// available" and never shows the consent screen at all, so a fresh clone
-// doesn't ship a half-configured sharing feature.
-val pawnsApiKey: String = localProps.getProperty("pawns.apiKey", "")
+// Bright SDK (bright-sdk.com) bandwidth-sharing/"Web Indexing" SDK — same
+// reasoning as the PostHog key above. Not actually secret (Bright's own docs
+// note the App ID is just the app's package name, checked against what was
+// registered on their dashboard), but blank-by-default is kept anyway so a
+// fresh clone doesn't ship a half-configured sharing feature: BrightManager
+// treats a blank value as "feature not available" and never touches the SDK.
+val brightAppId: String = localProps.getProperty("bright.appId", "")
 
 // Release signing, also from local.properties. Passwords must never be
 // committed, and the keystore file itself must never be committed — losing
@@ -39,10 +41,10 @@ plugins {
 
 android {
     namespace = "com.drift.tv"
-    // The Pawns SDK's own dependencies (androidx.core 1.17.0) require
-    // compileSdk 36+. targetSdk stays at 35 deliberately — compileSdk only
-    // exposes newer APIs to compile against; targetSdk is what opts the app
-    // into new runtime behavior, and there's no reason to take that on here.
+    // compileSdk 36 for FOREGROUND_SERVICE_DATA_SYNC (API 34+) and current
+    // Compose/tv-material. targetSdk stays at 35 deliberately — compileSdk
+    // only exposes newer APIs to compile against; targetSdk is what opts the
+    // app into new runtime behavior, and there's no reason to take that on here.
     compileSdk = 36
 
     defaultConfig {
@@ -53,20 +55,22 @@ android {
         versionName = "0.2.0"
         buildConfigField("String", "POSTHOG_API_KEY", "\"$postHogApiKey\"")
         buildConfigField("String", "POSTHOG_HOST", "\"$postHogHost\"")
-        buildConfigField("String", "PAWNS_API_KEY", "\"$pawnsApiKey\"")
+        buildConfigField("String", "BRIGHT_APP_ID", "\"$brightAppId\"")
     }
     // Two distribution channels with different legal constraints:
     //
-    //  sideload — GitHub releases / direct APK. Includes the Pawns
-    //             bandwidth-sharing SDK, behind explicit opt-in consent.
-    //  store    — Google Play and the Amazon Appstore, which both prohibit
-    //             SDKs that route third-party traffic through a user's
-    //             connection. The dependency is declared sideloadImplementation
-    //             below, so for this flavor the SDK isn't on the classpath and
-    //             its ~65MB of native relay libraries are never packaged. A
-    //             blank API key would not have been enough — that only disables
-    //             the SDK at runtime, leaving the libraries in the APK for a
-    //             reviewer to find.
+    //  sideload — GitHub releases / direct APK. Includes the Bright SDK
+    //             bandwidth-sharing ("Web Indexing") SDK, behind explicit
+    //             opt-in consent.
+    //  store    — Google Play and the Amazon Appstore. Bright SDK does have a
+    //             Play Store review/approval path (unlike Pawns, which is
+    //             store-prohibited outright), but that hasn't been pursued
+    //             here yet — this flavor stays SDK-free until it has. The
+    //             dependency is declared sideloadImplementation below, so for
+    //             this flavor the SDK isn't on the classpath and its AAR is
+    //             never packaged. A blank App ID would not have been enough —
+    //             that only disables the SDK at runtime, leaving it in the
+    //             APK for a reviewer to find.
     flavorDimensions += "distribution"
     productFlavors {
         create("sideload") {
@@ -144,12 +148,22 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.posthog.android)
-    // Shared, not sideload-only: SharingWatchdogWorker lives in src/main so
-    // both flavors compile it, and it no-ops via PawnsManager.available in
-    // the store flavor — there's nothing to watch there, so nothing is ever
-    // scheduled. See work/SharingWatchdog.kt.
-    implementation(libs.androidx.work.runtime.ktx)
     // Sideload only — see the productFlavors block. This is what keeps the
-    // SDK and its native libraries out of store builds entirely.
-    "sideloadImplementation"(libs.pawns.sdk)
+    // SDK out of store builds entirely.
+    //
+    // app/libs/bright_sdk.aar is checked into the repo rather than fetched by
+    // Bright's own Gradle plugin at build time. That plugin requires
+    // SDK_API_KEY to be set for every single build with no documented way to
+    // scope it to one flavor or skip it gracefully when absent — incompatible
+    // with this repo's CI and fresh-clone builds, which are designed to
+    // succeed with zero secrets present. The AAR was fetched once (see the
+    // sharing-persistence commit history) using Bright's own officially
+    // documented "Option B - Manual" install path; updating it later means
+    // re-running that fetch and committing the new file, not a version bump
+    // here.
+    "sideloadImplementation"(fileTree(mapOf("dir" to "libs", "include" to listOf("bright_sdk.aar"))))
+    // The AAR's own transitive dependencies, per Bright's Gradle plugin
+    // output at fetch time.
+    "sideloadImplementation"(libs.play.services.ads.identifier)
+    "sideloadImplementation"(libs.androidx.constraintlayout)
 }

@@ -20,28 +20,34 @@ jobs:
       # while AGP moved to 8.9.1, which requires Gradle 8.11.1 or newer.
       - uses: gradle/actions/setup-gradle@v6
       # Both flavors, so a change that breaks either is caught. The store
-      # flavor especially: it compiles without the Pawns SDK on the classpath,
-      # which is easy to break by adding an SDK reference to shared code.
-      # Android SDK is preinstalled on ubuntu-latest runners.
-      # local.properties is absent on CI, so the PostHog and Pawns keys are
-      # blank and both features build disabled — that's the intended default.
+      # flavor especially: it compiles without the Bright SDK on the
+      # classpath, which is easy to break by adding an SDK reference to
+      # shared code. Android SDK is preinstalled on ubuntu-latest runners.
+      # local.properties is absent on CI, so the PostHog and Bright App ID
+      # are blank and both features build disabled — that's the intended
+      # default. app/libs/bright_sdk.aar is checked into the repo (see
+      # app/build.gradle.kts for why), so this needs no secret either.
       - name: Build both flavors
         run: ./gradlew :app:assembleSideloadDebug :app:assembleStoreDebug
 
       # Guards the whole point of the store flavor: if the sharing SDK ever
       # leaks back into it, fail loudly here rather than at store review.
+      #
+      # Unlike Pawns, Bright SDK's AAR has no native .so libraries — it's
+      # pure Java/Kotlin — so its class names never appear as distinct zip
+      # entries the way libpawns.so did; `unzip -l` alone can't see them.
+      # They only show up inside the dex bytes, hence actually extracting
+      # and grepping the dex files rather than just listing entry names.
       - name: Verify store build contains no sharing SDK
         run: |
           APK=app/build/outputs/apk/store/debug/app-store-debug.apk
-          if unzip -l "$APK" | grep -qi "libpawns"; then
-            echo "::error::Pawns native libraries found in the store APK"
+          WORKDIR=$(mktemp -d)
+          unzip -q "$APK" '*.dex' -d "$WORKDIR"
+          if grep -l -a "com/android/eapx" "$WORKDIR"/*.dex 2>/dev/null; then
+            echo "::error::Bright SDK classes found in the store APK"
             exit 1
           fi
-          if unzip -l "$APK" | grep -qi "pawns"; then
-            echo "::error::Pawns entries found in the store APK"
-            exit 1
-          fi
-          echo "OK: no Pawns artifacts in $APK"
+          echo "OK: no Bright SDK artifacts in $APK"
 
       - name: Upload sideload APK
         uses: actions/upload-artifact@v4

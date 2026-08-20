@@ -1,48 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Sideload-only additions for the Pawns bandwidth-sharing SDK.
+  Sideload-only additions for the Bright SDK bandwidth-sharing ("Web
+  Indexing") integration.
 
-  These are kept out of the main manifest on purpose: the store flavor must
-  not declare the special-use foreground service permission or the peer
-  service, because Google Play and the Amazon Appstore both prohibit this
-  class of SDK. Merged into sideload builds only.
+  Unlike Pawns, there is nothing to declare here ourselves: the SDK's own AAR
+  (app/libs/bright_sdk.aar) carries its own merged manifest with everything it
+  needs already — RECEIVE_BOOT_COMPLETED, FOREGROUND_SERVICE and
+  FOREGROUND_SERVICE_DATA_SYNC, its own foreground service (running in a
+  separate :cskd_srvh process), its own JobScheduler-bound watchdog service,
+  and its own boot/update receiver (BOOT_COMPLETED, MY_PACKAGE_REPLACED,
+  PACKAGE_REPLACED). All of that merges in automatically because the
+  dependency is sideloadImplementation-only (see app/build.gradle.kts) — the
+  store flavor never sees any of it because the AAR was never on its
+  classpath, not because anything here excludes it.
+
+  This file exists as a placeholder and a place to explain why it's nearly
+  empty, kept in the sideload source set so a store-flavor build can never
+  accidentally pick it up.
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <!-- Required by the Pawns peer service on API 34+. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-
-    <application>
-        <!-- Only ever started after the person explicitly accepts the consent
-             dialog. Foreground rather than background, so a persistent,
-             visible notification stays up the entire time sharing is active:
-             nobody should have to wonder whether it's still running. -->
-        <service
-            android:name="com.pawns.sdk.internal.service.PeerServiceForeground"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Allows to share internet traffic by modifying device's network settings to be used as a gateway for internet traffic. Device becomes a gateway which allows to send and receive internet traffic." />
-        </service>
-        <meta-data
-            android:name="com.pawns.sdk.pawns_service_channel_name"
-            android:value="Internet Sharing" />
-
-        <!-- Resumes sharing after a reboot or an app update. exported=true is
-             required for the system to deliver these broadcasts at all; the
-             receiver ignores every action other than the two below, so this
-             doesn't give another app a way to switch sharing on.
-             RECEIVE_BOOT_COMPLETED is already declared by WorkManager, so no
-             new permission appears because of this. -->
-        <receiver
-            android:name=".sharing.SharingBootReceiver"
-            android:exported="true"
-            android:enabled="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
-        </receiver>
-    </application>
-</manifest>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

@@ -42,24 +42,30 @@ import com.drift.tv.ui.theme.Panel
 private val LinkBlue = Color(0xFF6EA8FE)
 
 /**
- * One-screen consent dialog for Pawns bandwidth sharing, shown over Home on
- * first launch. Modeled on the layout in the reference screenshot: centered
- * card over a dimmed scrim, title, short body, policy links, primary action
- * with a secondary decline beneath it.
+ * Priming screen for Bright SDK's "Web Indexing" bandwidth sharing, shown
+ * over Home on first launch. Modeled on the layout in the reference
+ * screenshot: centered card over a dimmed scrim, title, short body, policy
+ * links, primary action with a secondary decline beneath it.
  *
- * Replaces the SDK's bundled consent Activity for the on-open prompt (custom
- * implementations are explicitly permitted). Testing the stock one on a TV
- * turned up three blockers this fixes: it needed ~13 D-pad presses to reach
- * the buttons (every hyperlink paragraph is its own focus stop), its buttons
- * drew no focus indicator at all, and it was a full-white scrolling page.
- * Here there are exactly two focus stops and the focused one is unmistakable.
+ * Unlike Pawns, this is *not* where consent is actually captured — Bright's
+ * API has no way to grant consent programmatically. "Okay" here dismisses
+ * this screen and immediately opens Bright's own consent screen (restyled to
+ * match Drift via `CustomConsentSettings`, see BrightManager), which is the
+ * only place a "yes" can be recorded. "No thanks" still records a decline
+ * directly, since opting out is a plain API call.
  *
- * On the copy: the body deliberately states what Pawns.app actually receives
- * and costs, per Pawns' own consent document. Claiming "no personal data is
- * collected" would contradict it — the SDK shares IP and IP-derived location
- * with Pawns' clients — and Pawns puts responsibility for how this feature is
- * presented on the app owner, so an inaccurate disclosure is the app owner's
- * liability.
+ * Testing a bundled consent screen directly on a TV (during the earlier
+ * Pawns integration) turned up three blockers a priming screen like this one
+ * sidesteps for the common case: it needed ~13 D-pad presses to reach the
+ * buttons, its buttons drew no focus indicator at all, and it was a
+ * full-white scrolling page. Declining never has to touch Bright's screen at
+ * all here; accepting still does, once, since that's unavoidable.
+ *
+ * On the copy: the body deliberately states what Bright Data actually
+ * receives and costs, per their own disclosure requirements. Claiming "no
+ * personal data is collected" would contradict it, and Bright puts
+ * responsibility for how this feature is presented on the app owner, so an
+ * inaccurate disclosure is the app owner's liability.
  */
 @Composable
 fun ConsentDialog(
@@ -100,8 +106,8 @@ fun ConsentDialog(
                     textAlign = TextAlign.Center,
                 )
                 Text(
-                    "Drift can use a portion of your device's network bandwidth to route " +
-                        "internet traffic for Pawns.app and its clients. This helps fund " +
+                    "Drift can use a portion of your device's network bandwidth for Web " +
+                        "Indexing on behalf of Bright Data and its clients. This helps fund " +
                         "development and keep the app free. It runs in the background while " +
                         "your sounds play.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -110,28 +116,22 @@ fun ConsentDialog(
                     modifier = Modifier.padding(top = 16.dp),
                 )
                 Text(
-                    "Pawns.app receives your IP address and approximate location. This uses " +
+                    "Bright Data receives your IP address and approximate location. This uses " +
                         "data and battery and can affect your internet speed, so skip it on a " +
                         "metered or restricted connection. You can turn it off at any time in " +
-                        "Settings.",
+                        "Settings. Tapping Okay opens one more short screen from Bright Data to " +
+                        "confirm.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MoonDim,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 14.dp),
                 )
                 Text(
-                    "Terms of Use: pawns.app/terms-of-use",
+                    "Learn more: bright-sdk.com/users",
                     style = MaterialTheme.typography.labelMedium,
                     color = LinkBlue,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 16.dp),
-                )
-                Text(
-                    "Privacy Policy: pawns.app/privacy-policy",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = LinkBlue,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 4.dp),
                 )
 
                 Column(

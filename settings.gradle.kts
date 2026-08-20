@@ -10,7 +10,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://jitpack.io") }  // Pawns SDK is only published here
     }
 }
 rootProject.name = "Drift"

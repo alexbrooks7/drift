@@ -20,8 +20,7 @@ object Prefs {
     private fun volumeKey(soundId: String) = floatPreferencesKey("vol_$soundId")
     private val MIX = stringPreferencesKey("last_mix")
     private val TIMER = intPreferencesKey("last_timer_minutes")
-    private val PAWNS_CONSENT_ASKED = booleanPreferencesKey("pawns_consent_asked")
-    private val SHARING_ENABLED = booleanPreferencesKey("sharing_enabled")
+    private val BRIGHT_CONSENT_ASKED = booleanPreferencesKey("bright_consent_asked")
 
     suspend fun savedVolume(context: Context, sound: Sound): Float =
         context.dataStore.data.first()[volumeKey(sound.id)] ?: sound.defaultVolume
@@ -50,38 +49,24 @@ object Prefs {
     }
 
     /**
-     * Whether the Pawns consent prompt has been shown at least once.
+     * Whether the Bright SDK consent screen has been shown at least once.
      *
-     * The SDK only records a binary "consent given", which can't distinguish
-     * "never asked" from "asked and declined" — so auto-prompting on app open
-     * off `isConsentGiven()` alone re-asks on every single launch after a
-     * decline. This flag makes the prompt ask-once; opting in later is still
-     * available from the sharing screen's START button.
-     */
-    suspend fun pawnsConsentAsked(context: Context): Boolean =
-        context.dataStore.data.first()[PAWNS_CONSENT_ASKED] ?: false
-
-    suspend fun setPawnsConsentAsked(context: Context) {
-        context.dataStore.edit { it[PAWNS_CONSENT_ASKED] = true }
-    }
-
-    /**
-     * Whether the person wants sharing on, independent of the SDK's own
-     * consent bit and independent of whether the service actually happens to
-     * be running right now.
+     * `BrightApi.getConsentChoice()` returns `NONE` both when consent was
+     * never shown and when it was shown but dismissed without a choice (BACK)
+     * — so auto-prompting on app open off that alone re-asks on every single
+     * launch after a dismissal. This flag makes the prompt ask-once; opting
+     * in later is still available from "Review what this shares" in Settings.
      *
-     * `PawnsManager.hasConsent()` alone can't drive resume-on-launch or the
-     * boot receiver: it stays true after someone switches sharing off in
-     * Settings, since withdrawing consent entirely is a different act from
-     * pausing the feature. Resuming off that bit would quietly re-enable
-     * sharing the next time the app opens or the device reboots, overturning
-     * a deliberate opt-out. This flag is what SharingBootReceiver and
-     * SharingWatchdogWorker actually check.
+     * Unlike Pawns, there's no separate `sharingEnabled` flag here: Bright's
+     * SDK persists its own peer state and resumes it itself (own boot
+     * receiver, own foreground service, own JobScheduler watchdog — see
+     * app/src/sideload/AndroidManifest.xml), so there's nothing for Drift to
+     * track or reconcile on launch.
      */
-    suspend fun sharingEnabled(context: Context): Boolean =
-        context.dataStore.data.first()[SHARING_ENABLED] ?: false
+    suspend fun brightConsentAsked(context: Context): Boolean =
+        context.dataStore.data.first()[BRIGHT_CONSENT_ASKED] ?: false
 
-    suspend fun setSharingEnabled(context: Context, enabled: Boolean) {
-        context.dataStore.edit { it[SHARING_ENABLED] = enabled }
+    suspend fun setBrightConsentAsked(context: Context) {
+        context.dataStore.edit { it[BRIGHT_CONSENT_ASKED] = true }
     }
 }

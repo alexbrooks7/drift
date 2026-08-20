@@ -11,8 +11,12 @@ datastore = "1.1.1"
 serializationJson = "1.7.3"
 lifecycle = "2.8.7"
 posthog = "3.58.0"
-pawns = "1.8.1"
-work = "2.9.1"
+# Bright SDK's own transitive dependencies, per its Gradle plugin's resolved
+# dependency list at fetch time (see app/libs/bright_sdk.aar and the comment
+# on sideloadImplementation below) -- pinned to what the SDK itself declared,
+# not chosen independently.
+playServicesAdsIdentifier = "18.0.1"
+constraintlayout = "2.1.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -30,8 +34,8 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serializationJson" }
 posthog-android = { group = "com.posthog", name = "posthog-android", version.ref = "posthog" }
-pawns-sdk = { group = "app.pawns", name = "android-pawns-sdk", version.ref = "pawns" }
-androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+play-services-ads-identifier = { group = "com.google.android.gms", name = "play-services-ads-identifier", version.ref = "playServicesAdsIdentifier" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

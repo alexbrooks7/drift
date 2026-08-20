@@ -15,7 +15,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -35,26 +34,24 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
-import com.drift.tv.data.Prefs
-import com.drift.tv.sharing.PawnsManager
+import com.drift.tv.MainActivity
+import com.drift.tv.sharing.BrightManager
 import com.drift.tv.sharing.SharingStatus
 import com.drift.tv.ui.theme.AccentMagenta
 import com.drift.tv.ui.theme.AccentViolet
 import com.drift.tv.ui.theme.MoonDim
 import com.drift.tv.ui.theme.MoonWhite
 import com.drift.tv.ui.theme.Panel
-import com.drift.tv.work.SharingWatchdogScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 
 /**
  * In-app settings, reached from Home's gear. Currently holds only the
- * internet-sharing control, so it's shown only when [PawnsManager.available].
+ * Web Indexing control, so it's shown only when [BrightManager.available].
  *
- * Status is read from the SDK's own service-state flow rather than from the
- * consent flag — consent being granted doesn't prove the service is actually
- * running, and showing "Active" while it's erroring would be a lie the user
- * can't see through.
+ * Status is read from BrightManager's own status flow, which mirrors the
+ * SDK's consent-choice callback directly — for this SDK "consent granted"
+ * and "actively a peer" are the same thing, unlike Pawns where a separate
+ * running-state check mattered.
  */
 @Composable
 fun SettingsScreen(
@@ -62,22 +59,20 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val watchdog = remember { SharingWatchdogScheduler(context.applicationContext) }
-    val stateFlow = remember { PawnsManager.sharingStatus() ?: MutableStateFlow(SharingStatus.Off) }
+    val activity = context as MainActivity
+    val stateFlow = remember { BrightManager.sharingStatus() ?: MutableStateFlow(SharingStatus.Off) }
     val sharingState by stateFlow.collectAsState(SharingStatus.Off)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 
     val active = sharingState is SharingStatus.Active
-    val status = when (val s = sharingState) {
-        is SharingStatus.Off -> "Off — nothing is being shared"
-        is SharingStatus.Active -> "Active — this device is sharing its connection"
-        is SharingStatus.LowBattery -> "Paused — battery is low"
-        // The SDK's own wording, surfaced verbatim. "This IP is already in use"
-        // is the one people actually hit, and paraphrasing it would make it
-        // harder to act on.
-        is SharingStatus.Error -> "Not sharing — ${s.reason}"
+    // Bright's compliance rules: label must read "Web Indexing", no
+    // "opt in/opt out" wording, and value text stated either way — matches
+    // the framing ConsentDialog already uses ("Help Keep Drift Free").
+    val status = if (active) {
+        "Enabled — you're helping keep Drift free"
+    } else {
+        "Disabled — enable to help keep Drift free"
     }
 
     Column(
@@ -111,7 +106,8 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Internet sharing", style = MaterialTheme.typography.titleMedium)
+                    // Bright's own compliance rules require this exact label.
+                    Text("Web Indexing", style = MaterialTheme.typography.titleMedium)
                     Text(
                         status,
                         style = MaterialTheme.typography.bodySmall,
@@ -122,23 +118,15 @@ fun SettingsScreen(
                 SettingsButton(
                     label = if (active) "Turn off" else "Turn on",
                     onClick = {
-                        when {
-                            active -> {
-                                PawnsManager.stopSharing(context)
-                                watchdog.sync(false)
-                                scope.launch { Prefs.setSharingEnabled(context, false) }
-                            }
-                            // Already consented before — no need to re-ask.
-                            PawnsManager.hasConsent() -> {
-                                PawnsManager.startSharing(context)
-                                watchdog.sync(true)
-                                scope.launch { Prefs.setSharingEnabled(context, true) }
-                            }
-                            // Never consented (or previously declined): the
-                            // disclosure has to come before sharing starts.
-                            // Prefs.sharingEnabled is set from the dialog's
-                            // own onAccept/onDecline, not here.
-                            else -> onOpenConsent()
+                        if (active) {
+                            // Opting out is a direct API call, unlike opting
+                            // in — see BrightManager's class doc.
+                            BrightManager.optOut(context)
+                        } else {
+                            // There is no direct "opt in" call for this SDK:
+                            // the only way to grant consent is through
+                            // Bright's own consent screen.
+                            BrightManager.showConsent(activity)
                         }
                     },
                     modifier = Modifier.focusRequester(focus),
