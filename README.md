@@ -4,6 +4,9 @@ A D-pad-first Android TV app that loops ambient sleep sounds behind full-screen
 artwork, mixes up to three layers, fades out on a sleep timer, and offers a
 "lights out" mode that blacks the screen while audio keeps playing.
 
+**[Privacy Policy](docs/privacy-policy.md)** — what leaves the device, what
+stays on it, and how the two build flavors differ.
+
 ## Visual design
 
 The look was restyled from a wellness-app reference (dark violet chrome, a
