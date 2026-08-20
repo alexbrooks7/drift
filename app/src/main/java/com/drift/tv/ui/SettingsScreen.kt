@@ -114,6 +114,10 @@ fun SettingsScreen(
                         color = MoonDim,
                         modifier = Modifier.padding(top = 2.dp)
                     )
+                    // Required to sit with the toggle, not on some other
+                    // screen: Bright's TV rules put the QR alongside the
+                    // control itself. See LearnMoreQr.
+                    LearnMoreQr(Modifier.padding(top = 14.dp))
                 }
                 SettingsButton(
                     label = if (active) "Turn off" else "Turn on",

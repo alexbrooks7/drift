@@ -38,9 +38,6 @@ import com.drift.tv.ui.theme.MoonDim
 import com.drift.tv.ui.theme.MoonWhite
 import com.drift.tv.ui.theme.Panel
 
-/** Same blue as the reference dialog's link text. */
-private val LinkBlue = Color(0xFF6EA8FE)
-
 /**
  * Priming screen for Bright SDK's "Web Indexing" bandwidth sharing, shown
  * over Home on first launch. Modeled on the layout in the reference
@@ -126,13 +123,7 @@ fun ConsentDialog(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 14.dp),
                 )
-                Text(
-                    "Learn more: bright-sdk.com/users",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = LinkBlue,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 16.dp),
-                )
+                LearnMoreQr(Modifier.padding(top = 18.dp))
 
                 Column(
                     Modifier
